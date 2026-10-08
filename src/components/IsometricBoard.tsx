@@ -344,7 +344,22 @@ export const IsometricBoard: React.FC<IsometricBoardProps> = ({
             top: `${(boardSize * tileHeight) / 2 + 30}px`,
           }}
         >
-          {/* LAYER 0: SEAMLESS BASE TILES (8x8 CHECKERBOARD) */}
+          {/* LAYER 0a: FLOATING ISLAND BOARD (art is pre-warped to an exact 2:1 diamond; 2x resolution,
+              its top-face corner sits at (464,30) in image px so it lines up with grid vertex (0,0)) */}
+          <img
+            src={assets.islandBoard}
+            alt="Floating island board"
+            draggable={false}
+            className="absolute pointer-events-none select-none max-w-none"
+            style={{
+              width: `${(928 * tileWidth) / 96}px`,
+              left: `${(-464 * tileWidth) / 96}px`,
+              top: `${-tileHeight / 2 - (30 * tileWidth) / 96}px`,
+              zIndex: 0,
+            }}
+          />
+
+          {/* LAYER 0b: 8x8 GRID OVERLAY (also the click targets) */}
           {tiles.map(tile => {
             const { r, c, isLight } = tile;
             const iso = gridToIso(r, c, tileWidth, tileHeight);
@@ -371,19 +386,14 @@ export const IsometricBoard: React.FC<IsometricBoardProps> = ({
                   left: `${iso.x - tileWidth / 2}px`,
                   top: `${iso.y - tileHeight / 2}px`,
                   width: `${tileWidth}px`,
-                  height: `${tileImageHeight}px`,
+                  height: `${tileHeight}px`,
+                  clipPath: 'polygon(50% 0, 100% 50%, 50% 100%, 0 50%)', // exact diamond hit area
                   zIndex: getIsoDepth(r, c, 0),
                 }}
                 className="absolute cursor-pointer group m-0 p-0 overflow-visible"
               >
                 {/* Seamless Tile Graphic */}
                 <div className="relative w-full h-full m-0 p-0">
-                  <img
-                    src={isLight ? assets.tileLight : assets.tileDark}
-                    alt={`Tile ${r},${c}`}
-                    draggable={false}
-                    className="w-full h-full object-fill pointer-events-none select-none block transition-opacity group-hover:brightness-110"
-                  />
 
                   {/* Interactive Diamond Polygon for Clean Highlight */}
                   <svg
@@ -391,6 +401,13 @@ export const IsometricBoard: React.FC<IsometricBoardProps> = ({
                     className="absolute top-0 left-0 w-full pointer-events-none"
                     style={{ height: `${tileHeight}px` }}
                   >
+                    {/* Grid cell: faint checker tint + grid line */}
+                    <polygon
+                      points={`${tileWidth / 2},0 ${tileWidth},${tileHeight / 2} ${tileWidth / 2},${tileHeight} 0,${tileHeight / 2}`}
+                      fill={isLight ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.22)'}
+                      stroke="rgba(255,255,255,0.55)"
+                      strokeWidth="1.5"
+                    />
                     {/* Legal Move Diamond Highlight */}
                     {isLegalMove && (
                       <polygon

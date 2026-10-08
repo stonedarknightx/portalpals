@@ -11,6 +11,8 @@ import {
 } from './types';
 import { PIECES, randomBench, BOARD_PRESETS } from './data/pieces';
 import { calculateLegalMoves, isStartingPositionValid, isPitTile, isSolidTile } from './utils/movement';
+import { ToastHost } from './components/ToastHost';
+import { toast } from './utils/toast';
 import { applyMoveEffects, applyStartOfTurn, isNear } from './utils/abilities';
 import { computeAIPlacement, computeAIMove } from './utils/ai';
 import { sound } from './utils/audio';
@@ -198,6 +200,7 @@ export default function App() {
 
   // Restart match
   const handleRestartMatch = () => {
+    toast('New match started. Good luck!', 'round');
     setGameState(createInitialState(activePreset, playerBench));
   };
 
@@ -282,6 +285,21 @@ export default function App() {
       return;
     }
 
+    const def = PIECES[defId];
+    if (def && gameState.currentTurn === 'player') {
+      if (gameState.playerPlayedDefIds.includes(defId)) {
+        toast(`${def.name} has already been played this match.`, 'warn');
+        return;
+      }
+      if (def.turnAvailable > gameState.round) {
+        toast(`${def.name} unlocks on round ${def.turnAvailable}.`, 'warn');
+        return;
+      }
+      if (defId !== gameState.selectedBenchDefId) {
+        const where = def.startPosition === 'Borders' ? 'a border tile' : def.startPosition === 'Corners' ? 'a corner tile' : 'any open tile';
+        toast(`${def.name} selected. Tap ${where} to deploy.`, 'info');
+      }
+    }
     setGameState(prev => ({
       ...prev,
       selectedBenchDefId: defId === prev.selectedBenchDefId ? null : defId,
@@ -294,11 +312,17 @@ export default function App() {
 
     if (gameState.phase === 'move') {
       if (piece.owner === 'player') {
+        if (piece.hasMovedThisTurn) {
+          toast(`${PIECES[piece.defId]?.name} has already moved this turn.`, 'info');
+          return;
+        }
         setGameState(prev => ({
           ...prev,
           selectedPieceId: piece.id,
           selectedBenchDefId: null,
         }));
+      } else {
+        toast("That's an opponent piece. Select one of yours to move.", 'info');
       }
     } else if (gameState.phase === 'place') {
       // If 3 pieces on board and player tapped friendly piece with bench piece selected: replace
@@ -308,6 +332,7 @@ export default function App() {
         const def = PIECES[gameState.selectedBenchDefId];
         if (!def) return;
 
+        toast(`${def.name} replaced ${PIECES[piece.defId]?.name}.`, 'success');
         sound.playPiecePlace();
         const replacedPieces = gameState.boardPieces.filter(p => p.id !== piece.id);
         const newPiece: BoardPiece = {
@@ -328,6 +353,8 @@ export default function App() {
           phase: 'move',
           selectedPieceId: newPiece.id,
         }));
+      } else if (playerPieces.length >= 3 && !gameState.selectedBenchDefId) {
+        toast('Pick a figurine from your bench first, then tap the piece you want to swap out.', 'info');
       }
     }
   };
@@ -340,8 +367,14 @@ export default function App() {
       const def = PIECES[gameState.selectedBenchDefId];
       if (!def) return;
       // Rulebook: max 3 on board; at 3 you must tap a friendly piece to replace it, or skip.
-      if (gameState.boardPieces.filter(p => p.owner === 'player').length >= 3) return;
-      if (def.turnAvailable > gameState.round) return;
+      if (gameState.boardPieces.filter(p => p.owner === 'player').length >= 3) {
+        toast('You already have 3 figurines out. Tap one of yours to swap it, or skip placing.', 'warn');
+        return;
+      }
+      if (def.turnAvailable > gameState.round) {
+        toast(`${def.name} unlocks on round ${def.turnAvailable}.`, 'warn');
+        return;
+      }
 
       if (
         isStartingPositionValid(
@@ -372,12 +405,23 @@ export default function App() {
           phase: 'move',
           selectedPieceId: newPiece.id,
         }));
+        toast(`${def.name} deployed! Now tap a highlighted tile to move.`, 'success');
+      } else {
+        const rule = def.startPosition === 'Borders' ? 'on an edge tile' : def.startPosition === 'Corners' ? 'on a corner tile' : 'on an open tile';
+        toast(`${def.name} must start ${rule} that isn't blocked.`, 'warn');
       }
+    } else if (gameState.phase === 'place') {
+      toast('Pick a figurine from your bench to deploy, or skip placing.', 'info');
+    } else if (gameState.phase === 'move' && gameState.selectedPieceId) {
+      toast('Tap a highlighted tile to move there.', 'info');
+    } else if (gameState.phase === 'move') {
+      toast('Tap one of your figurines to select it.', 'info');
     }
   };
 
   // Skipping placement when >= 1 piece on board
   const handleSkipPlace = () => {
+    toast('Placement skipped. Move your figurines!', 'info');
     setGameState(prev => ({
       ...prev,
       selectedBenchDefId: null,
@@ -584,6 +628,63 @@ export default function App() {
     }
   }, [gameState.boardPieces, gameState.phase, gameState.currentTurn, animatingPiece]);
 
+  // ---- Player feedback: score changes, ability log lines, rounds and turns ----
+  const prevScores = useRef(gameState.scores);
+  const prevLogLen = useRef(gameState.log.length);
+  const prevRound = useRef(gameState.round);
+  const prevTurn = useRef(gameState.currentTurn);
+  const prevPhase = useRef(gameState.phase);
+
+  useEffect(() => {
+    const p = prevScores.current, n = gameState.scores;
+    const dp = n.player - p.player, dopp = n.opponent - p.opponent;
+    if (dp > 0) toast(`+${dp} coin${dp > 1 ? 's' : ''} for you!`, 'coin');
+    if (dopp > 0) toast(`Opponent scored +${dopp}.`, 'info');
+    if (dp > 0 || dopp > 0) {
+      const was = Math.sign(p.player - p.opponent), now = Math.sign(n.player - n.opponent);
+      if (now !== was && now !== 0 && (p.player + p.opponent) > 0) {
+        toast(now > 0 ? 'You took the lead!' : 'The opponent took the lead!', now > 0 ? 'success' : 'warn');
+      }
+    }
+    prevScores.current = n;
+  }, [gameState.scores]);
+
+  useEffect(() => {
+    if (gameState.log.length < prevLogLen.current) prevLogLen.current = 0; // new match
+    gameState.log.slice(prevLogLen.current).slice(-3).forEach(line => {
+      if (!line.startsWith('Match started')) toast(line, 'ability');
+    });
+    prevLogLen.current = gameState.log.length;
+  }, [gameState.log]);
+
+  useEffect(() => {
+    if (gameState.round !== prevRound.current && gameState.phase !== 'game_over') {
+      toast(`Round ${gameState.round} of ${gameState.maxRounds}`, 'round');
+    }
+    prevRound.current = gameState.round;
+  }, [gameState.round]);
+
+  useEffect(() => {
+    if (gameState.phase === 'game_over') return;
+    if (gameState.currentTurn !== prevTurn.current) {
+      toast(
+        gameState.currentTurn === 'opponent' ? "Opponent's turn…" : 'Your turn! Deploy a figurine or move.',
+        'info',
+        1800
+      );
+    }
+    prevTurn.current = gameState.currentTurn;
+  }, [gameState.currentTurn]);
+
+  useEffect(() => {
+    if (gameState.phase === 'game_over' && prevPhase.current !== 'game_over') {
+      const s = gameState.scores;
+      toast(s.player > s.opponent ? 'Victory! You won the match!' : s.player < s.opponent ? 'Defeat. The opponent won this one.' : "It's a draw!",
+        s.player > s.opponent ? 'success' : s.player < s.opponent ? 'error' : 'info', 4500);
+    }
+    prevPhase.current = gameState.phase;
+  }, [gameState.phase]);
+
   // AI Opponent Loop
   useEffect(() => {
     if (gameState.currentTurn !== 'opponent' || gameState.phase === 'game_over') return;
@@ -604,6 +705,7 @@ export default function App() {
           };
 
           sound.playPiecePlace();
+          toast(`Opponent deployed ${def.name}.`, 'info');
           setGameState(prev => ({
             ...prev,
             boardPieces: [...prev.boardPieces, newPiece],
@@ -688,6 +790,7 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-zinc-950 text-zinc-100 flex flex-col">
+      <ToastHost />
       {/* 3D ISOMETRIC BOARD STAGE */}
       <div className="relative flex-1 w-full h-full">
         <IsometricBoard

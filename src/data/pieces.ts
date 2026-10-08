@@ -1,5 +1,6 @@
 import { PieceDef } from '../types';
 import { FIGURINES } from './figurines';
+import { asset } from '../utils/assets';
 
 export const STARTER_PIECE_IDS = [
   'donald',
@@ -386,7 +387,7 @@ export const PIECES: Record<string, PieceDef> = {
     movementDesc: 'Unlimited squares in any direction until hitting an obstacle',
     ability: 'Moves until hitting an obstacle and pushes away adjacent pieces by 1 tile at end of movement',
     received: 'Ranking',
-    customSpriteUrl: '/images/robot_iso_cutout.png',
+    customSpriteUrl: asset('/images/robot_iso_cutout.png'),
     accentColor: '#ca8a04',
     secondaryColor: '#854d0e',
   },
@@ -397,8 +398,8 @@ Object.entries(FIGURINES).forEach(([id, f]) => {
   if (!PIECES[id]) return;
   PIECES[id].name = f.name;
   PIECES[id].theme = f.theme;
-  PIECES[id].description = f.desc;
-  if (f.sprite) PIECES[id].avatarUrl = `/images/figs/${f.sprite}.png`;
+  PIECES[id].description = f.lore;
+  if (f.sprite) PIECES[id].avatarUrl = asset(`/images/figs/${f.sprite}.png`);
 });
 
 // Clarified ability text (matches the engine in utils/abilities.ts)

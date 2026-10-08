@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
 import { PieceDef } from '../types';
 import { PIECES, JUMPER_IDS, WALL_BREAKER_IDS, PASS_PIECE_IDS, randomBench } from '../data/pieces';
+import { toast } from '../utils/toast';
 import { X, Search, Check, Sparkles, Compass, Shield, Shuffle, Mountain } from 'lucide-react';
+
+// What each figurine source means (shown under the filter tabs)
+const SOURCE_INFO: Record<string, string> = {
+  All: 'Every figurine in the game. Tap one to read its backstory and see its full stats.',
+  Auto: 'Starter figurines: yours from the very beginning, with no unlocking needed.',
+  Ranking: 'Unlocked by earning Ranking Points as you win and play matches.',
+  Crafting: 'Unlocked through the crafting system instead of the ranking track. Special pieces you build rather than win.',
+};
 
 // Terrain behaviour shown on cards (mirrors utils/movement.ts)
 function terrainInfo(id: string) {
@@ -50,16 +59,22 @@ export const RosterModal: React.FC<RosterModalProps> = ({
   const isInBench = !!activeDef && selectedBench.includes(activeDef.id);
 
   const toggleBench = (defId: string) => {
+    const name = PIECES[defId]?.name || 'Figurine';
     if (selectedBench.includes(defId)) {
-      if (selectedBench.length <= 1) return; // keep at least 1
+      if (selectedBench.length <= 1) {
+        toast('Your bench needs at least one figurine.', 'warn');
+        return;
+      }
       onUpdateBench(selectedBench.filter(id => id !== defId));
+      toast(`${name} removed from your bench.`, 'info');
     } else {
       if (selectedBench.length >= 5) {
-        // replace the last one or alert
-        const next = [...selectedBench.slice(1), defId];
-        onUpdateBench(next);
+        const dropped = PIECES[selectedBench[0]]?.name || 'your oldest pick';
+        onUpdateBench([...selectedBench.slice(1), defId]);
+        toast(`Bench full: ${name} replaced ${dropped}.`, 'warn');
       } else {
         onUpdateBench([...selectedBench, defId]);
+        toast(`${name} added to your bench (${selectedBench.length + 1}/5).`, 'success');
       }
     }
   };
@@ -72,7 +87,7 @@ export const RosterModal: React.FC<RosterModalProps> = ({
           <div>
             <h2 className="text-lg font-black text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-400" />
-              ScrambleCoin Roster (34 Figurines)
+              Portal Pals Roster (34 Figurines)
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
               Tap a figurine for details and to add it to your match bench ({selectedBench.length}/5 selected)
@@ -108,7 +123,7 @@ export const RosterModal: React.FC<RosterModalProps> = ({
                 Your bench is picked at random. Reshuffle for a fresh five, or swap figurines in from the All Figurines tab.
               </p>
               <button
-                onClick={() => onUpdateBench(randomBench())}
+                onClick={() => { onUpdateBench(randomBench()); toast('Bench shuffled: here are your 5 new figurines!', 'ability'); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-sm font-black cursor-pointer"
               >
                 <Shuffle className="w-4 h-4" /> Shuffle Bench
@@ -185,10 +200,11 @@ export const RosterModal: React.FC<RosterModalProps> = ({
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                {tab}
+                {tab}{tab !== 'All' ? ` (${pieceList.filter(p => p.received === tab).length})` : ''}
               </button>
             ))}
           </div>
+          <p className="w-full text-[11px] text-zinc-400 leading-snug">{SOURCE_INFO[filterSource]}</p>
         </div>
 
         )}
@@ -271,11 +287,11 @@ export const RosterModal: React.FC<RosterModalProps> = ({
               <X className="w-5 h-5" />
             </button>
             <div
-              className="h-64 flex items-end justify-center rounded-t-2xl overflow-hidden"
+              className="h-48 flex items-end justify-center rounded-t-2xl overflow-hidden"
               style={{ background: `radial-gradient(circle at 50% 75%, ${activeDef.accentColor}66, #09090b 75%)` }}
             >
               {activeDef.avatarUrl ? (
-                <img src={activeDef.avatarUrl} alt={activeDef.name} className="h-60 w-auto object-contain drop-shadow-xl mb-2" />
+                <img src={activeDef.avatarUrl} alt={activeDef.name} className="h-44 w-auto object-contain drop-shadow-xl mb-1" />
               ) : (
                 <div className="self-center text-6xl font-black text-white/80">{activeDef.name.slice(0, 2).toUpperCase()}</div>
               )}
@@ -291,19 +307,21 @@ export const RosterModal: React.FC<RosterModalProps> = ({
               </div>
 
               {activeDef.description && (
-                <p className="text-xs text-zinc-300 leading-relaxed italic">{activeDef.description}</p>
+                <p className="text-xs text-zinc-300 leading-relaxed"><span className="font-bold text-amber-300">Backstory: </span>{activeDef.description}</p>
               )}
-              <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
-                  <Compass className="w-3.5 h-3.5 text-blue-400" /> Starting Position
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-emerald-400" /> Movement
+                  </div>
+                  <div className="text-xs font-semibold text-zinc-200 leading-snug">{activeDef.movementDesc}</div>
                 </div>
-                <div className="text-xs font-semibold text-zinc-200">{activeDef.startPosition} tiles</div>
-              </div>
-              <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
-                <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-emerald-400" /> Movement
+                <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                    <Compass className="w-3.5 h-3.5 text-blue-400" /> Starts On
+                  </div>
+                  <div className="text-xs font-semibold text-zinc-200 leading-snug">{activeDef.startPosition} tiles</div>
                 </div>
-                <div className="text-xs font-semibold text-zinc-200 leading-relaxed">{activeDef.movementDesc}</div>
               </div>
               <div className="p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
                 <div className="text-[10px] uppercase font-bold text-amber-400 mb-1 flex items-center gap-1">
